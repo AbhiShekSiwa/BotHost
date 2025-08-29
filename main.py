@@ -66,19 +66,33 @@ class DerivativeModal(Modal, title="Derivative"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            f = parse_safe(str(self.expr))
-            var_name = str(self.var).strip()
-            if var_name not in ("x", "y"):
-                raise ValueError("Variable must be x or y.")
-            n = int(str(self.order).strip() or "1")
-            var_sym = x if var_name == "x" else y
-            df = f.diff(var_sym, n)
+            from sympy import N
+            # read degrees
+            φ = math.radians(float(str(self.phi).strip()))
+            θ = math.radians(float(str(self.theta).strip()))
+            ψ = math.radians(float(str(self.psi).strip()))
+
+            # Active rotation (ZYX): R = Rz(ψ) * Ry(θ) * Rx(φ)
+            R = self.rot_z(ψ) * self.rot_y(θ) * self.rot_x(φ)
+
+            # Wolfram-style Direction Cosine Matrix (passive frame transform)
+            C = R.T
+
+            Cn = N(C, 6)
+            rows = ["[" + ", ".join(f"{float(v): .6f}" for v in Cn.row(i)) + "]" for i in range(3)]
+            txt = "\n".join(rows)
+
             await interaction.response.send_message(
-                f"**∂^{n} f / ∂{var_name}^{n}**\n```text\n{df}\n```",
+                "**Direction cosine matrix (DCM, passive, matches Wolfram Alpha)**\n"
+                f"Order = ZYX (yaw–pitch–roll), degrees input\n"
+                f"φ={self.phi}°, θ={self.theta}°, ψ={self.psi}°\n"
+                f"```text\n{txt}\n```",
                 ephemeral=True
             )
         except Exception as e:
             await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+
+
 
 class IntegralModal(Modal, title="Integral"):
     expr = TextInput(label="f(x, y)", placeholder="e.g. x^2 + y", required=True)
@@ -242,6 +256,22 @@ async def remove(ctx):
     else:
         await ctx.send("You don't have that role.")
 
+from discord import Object
+from discord.ext import commands
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def sync_here(ctx):
+    g = Object(id=ctx.guild.id)
+    bot.tree.copy_global_to(guild=g)
+    synced = await bot.tree.sync(guild=g)
+    await ctx.send(f"Synced {len(synced)} commands to this server.")
+
+
+
 # ---------- Keep-alive + run ----------
 webserver.keep_alive()
+
+
+
 bot.run(TOKEN, log_handler=handler, log_level=logging.DEBUG)
