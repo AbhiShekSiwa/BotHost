@@ -66,27 +66,22 @@ class DerivativeModal(Modal, title="Derivative"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            from sympy import N
-            # read degrees
-            φ = math.radians(float(str(self.phi).strip()))
-            θ = math.radians(float(str(self.theta).strip()))
-            ψ = math.radians(float(str(self.psi).strip()))
+            # pull values from the inputs
+            expr_str = self.expr.value.strip()
+            var_name = self.var.value.strip().lower()
+            order_str = (self.order.value or "1").strip()
 
-            # Active rotation (ZYX): R = Rz(ψ) * Ry(θ) * Rx(φ)
-            R = self.rot_z(ψ) * self.rot_y(θ) * self.rot_x(φ)
+            if var_name not in ("x", "y"):
+                raise ValueError("Variable must be x or y.")
 
-            # Wolfram-style Direction Cosine Matrix (passive frame transform)
-            C = R.T
+            n = int(order_str)  # derivative order
+            var_sym = x if var_name == "x" else y
 
-            Cn = N(C, 6)
-            rows = ["[" + ", ".join(f"{float(v): .6f}" for v in Cn.row(i)) + "]" for i in range(3)]
-            txt = "\n".join(rows)
+            f = parse_safe(expr_str)
+            df = f.diff(var_sym, n)
 
             await interaction.response.send_message(
-                "**Direction cosine matrix (DCM, passive, matches Wolfram Alpha)**\n"
-                f"Order = ZYX (yaw–pitch–roll), degrees input\n"
-                f"φ={self.phi}°, θ={self.theta}°, ψ={self.psi}°\n"
-                f"```text\n{txt}\n```",
+                f"**∂^{n} f / ∂{var_name}^{n}**\n```text\n{df}\n```",
                 ephemeral=True
             )
         except Exception as e:
@@ -151,7 +146,7 @@ class EulerModal(Modal, title="Euler Z-Y-X (yaw-pitch-roll)"):
             θ = math.radians(float(str(self.theta).strip()))
             ψ = math.radians(float(str(self.psi).strip()))
             R = self.rot_z(ψ) * self.rot_y(θ) * self.rot_x(φ)  # ZYX
-            Rn = N(R, 6)
+            Rn = N(R.T, 6)
             rows = ["[" + ", ".join(f"{float(val): .6f}" for val in Rn.row(i)) + "]" for i in range(3)]
             txt = "\n".join(rows)
             await interaction.response.send_message(
